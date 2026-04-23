@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yagüi — configuración</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f172a; color: #e2e8f0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh; padding: 2rem;
+    }
+
+    .logo { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .subtitle { font-size: 0.85rem; color: #94a3b8; margin-bottom: 2rem; text-align: center; }
+
+    .panel { width: 100%; max-width: 420px; }
+    .estado { display: none; flex-direction: column; align-items: center; gap: 1rem; }
+    .estado.activo { display: flex; }
+
+    /* ── Instrucciones Estado A ── */
+    .instrucciones {
+      background: #1e293b; border-radius: 12px; padding: 1.25rem;
+      font-size: 0.875rem; color: #cbd5e1; line-height: 1.6; width: 100%;
+    }
+    .instrucciones ol { padding-left: 1.25rem; }
+    .instrucciones li { margin-bottom: 0.4rem; }
+
+    .link-manual {
+      font-size: 0.8rem; color: #475569; cursor: pointer;
+      text-decoration: underline; background: none; border: none;
+    }
+    .link-manual:hover { color: #94a3b8; }
+
+    /* ── Formulario manual ── */
+    .form-manual {
+      display: none; flex-direction: column; gap: 0.75rem; width: 100%;
+    }
+    .form-manual.visible { display: flex; }
+    .form-titulo {
+      font-size: 1rem; font-weight: 700; color: #f1f5f9; margin-bottom: 0.25rem;
+    }
+    .field { display: flex; flex-direction: column; gap: 0.3rem; }
+    .field label { font-size: 0.75rem; color: #94a3b8; font-weight: 600; }
+    .field input {
+      background: #1e293b; border: 1px solid #334155; border-radius: 8px;
+      padding: 0.65rem 0.85rem; color: #f1f5f9; font-size: 0.875rem;
+      outline: none; width: 100%;
+    }
+    .field input:focus { border-color: #22c55e; }
+    .field-pw { position: relative; }
+    .field-pw input { padding-right: 2.5rem; }
+    .ojo {
+      position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%);
+      background: none; border: none; color: #64748b; cursor: pointer;
+      font-size: 1rem; line-height: 1;
+    }
+
+    /* ── Estado activo / badge ── */
+    .spinner {
+      width: 48px; height: 48px;
+      border: 4px solid #334155; border-top-color: #22c55e;
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      background: #14532d; color: #86efac;
+      padding: 0.5rem 1.25rem; border-radius: 999px;
+      font-weight: 600; font-size: 1rem;
+    }
+    .badge::before { content: "●"; color: #22c55e; }
+
+    .dato {
+      background: #1e293b; border-radius: 8px; padding: 0.75rem 1rem;
+      width: 100%; font-size: 0.8rem;
+    }
+    .dato span { color: #94a3b8; display: block; margin-bottom: 2px; font-size: 0.72rem; }
+    .dato strong { word-break: break-all; }
+
+    /* ── Inventario ── */
+    .inventario-section {
+      width: 100%; background: #1e293b; border-radius: 12px; padding: 1.25rem;
+      display: flex; flex-direction: column; gap: 0.6rem;
+    }
+    .inventario-titulo { font-size: 0.95rem; font-weight: 700; color: #f1f5f9; }
+    .inventario-subtitulo { font-size: 0.78rem; color: #64748b; line-height: 1.55; }
+
+    .carpeta-sel {
+      display: none; flex-direction: column; gap: 0.4rem;
+      background: #0f2b1e; border: 1px solid #166534; border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+    .carpeta-sel.visible { display: flex; }
+    .carpeta-ruta { font-size: 0.8rem; color: #86efac; font-weight: 600; word-break: break-all; }
+    .carpeta-ruta::before { content: "✓ "; }
+    .carpeta-nota { font-size: 0.73rem; color: #4ade80; opacity: 0.75; }
+
+    /* ── Botones ── */
+    button {
+      padding: 0.65rem 1.5rem; border-radius: 8px; border: none;
+      cursor: pointer; font-size: 0.9rem; font-weight: 600; transition: opacity 0.15s;
+    }
+    button:hover { opacity: 0.85; }
+    .btn-primary   { background: #22c55e; color: #052e16; width: 100%; }
+    .btn-secondary { background: #1e293b; color: #94a3b8; border: 1px solid #334155; font-size: 0.82rem; padding: 0.5rem 1rem; }
+    .btn-danger    { background: #ef4444; color: white; }
+    .btn-danger-soft { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; font-size: 0.82rem; padding: 0.5rem 1.25rem; }
+    .btn-ghost     { background: transparent; color: #64748b; text-decoration: underline; font-weight: 400; }
+    .btn-cancel    { background: transparent; color: #475569; font-size: 0.85rem; font-weight: 400; }
+
+    .acciones { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
+
+    .msg-error {
+      background: #450a0a; border: 1px solid #ef4444; border-radius: 8px;
+      padding: 0.75rem 1rem; font-size: 0.8rem; color: #fca5a5;
+      width: 100%; text-align: center;
+    }
+
+    hr { border: none; border-top: 1px solid #1e293b; width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="logo">🍄</div>
+  <h1>Yagüi Desktop</h1>
+  <p class="subtitle">Agente local del comerciante</p>
+
+  <div class="panel">
+
+    <!-- ═══ ESTADO A: sin configurar ═══ -->
+    <div id="estado-a" class="estado">
+
+      <!-- Instrucciones normales -->
+      <div id="a-instrucciones" style="width:100%;display:flex;flex-direction:column;gap:1rem;align-items:center">
+        <div class="instrucciones">
+          <p style="margin-bottom:0.75rem;font-weight:600;color:#e2e8f0">Para activar este nodo:</p>
+          <ol>
+            <li>Abre la app <strong>Micelio Comerciante</strong> en tu móvil.</li>
+            <li>Ve a <strong>Configurar servidor</strong>.</li>
+            <li>La app detectará este equipo y enviará la configuración automáticamente.</li>
+          </ol>
+          <p style="margin-top:0.75rem;color:#64748b;font-size:0.78rem">
+            Asegúrate de que el móvil y este equipo están en la misma red Wi-Fi.
+          </p>
+        </div>
+        <p id="a-error" class="msg-error" style="display:none"></p>
+        <button class="link-manual" onclick="mostrarFormManual()">Configurar manualmente</button>
+      </div>
+
+      <!-- Formulario de configuración manual -->
+      <div id="a-form-manual" class="form-manual">
+        <p class="form-titulo">Configuración manual</p>
+
+        <div class="field">
+          <label>API Key</label>
+          <input id="f-apikey" type="text" placeholder="yg_abc123…" autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label>Tunnel URL</label>
+          <input id="f-tunnel-url" type="text" placeholder="nodo1.xn--yagi-2ra.com" autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <label>Tunnel Token</label>
+          <div class="field-pw">
+            <input id="f-tunnel-token" type="password" placeholder="Token de Cloudflare" autocomplete="off" />
+            <button class="ojo" onclick="toggleToken()" title="Mostrar/ocultar">👁</button>
+          </div>
+        </div>
+
+        <p id="form-error" class="msg-error" style="display:none"></p>
+
+        <button class="btn-primary" onclick="enviarManual()">Guardar y activar</button>
+        <button class="btn-cancel" onclick="ocultarFormManual()">Cancelar</button>
+      </div>
+
+    </div>
+
+    <!-- ═══ ESTADO B: configurando ═══ -->
+    <div id="estado-b" class="estado">
+      <div class="spinner"></div>
+      <p style="color:#94a3b8">Activando el nodo...</p>
+    </div>
+
+    <!-- ═══ ESTADO C: activo ═══ -->
+    <div id="estado-c" class="estado">
+      <div class="badge">Nodo activo</div>
+
+      <div class="dato">
+        <span>Tunnel URL</span>
+        <strong id="val-tunnel">—</strong>
+      </div>
+      <div class="dato">
+        <span>API Key</span>
+        <strong id="val-apikey">—</strong>
+      </div>
+
+      <!-- Selector de carpeta de inventario -->
+      <div class="inventario-section">
+        <p class="inventario-titulo">Tu inventario</p>
+        <p class="inventario-subtitulo">
+          El nodo solo puede responder sobre los productos que estén en esta carpeta.
+          Si un producto no está aquí, el nodo no aparecerá cuando lo busquen.
+        </p>
+
+        <div id="carpeta-info" class="carpeta-sel">
+          <p class="carpeta-ruta" id="carpeta-ruta-texto"></p>
+          <p class="carpeta-nota">Solo los productos de esta carpeta son visibles para las IAs</p>
+          <button class="btn-secondary" onclick="seleccionarCarpeta()">Cambiar carpeta</button>
+        </div>
+
+        <button id="btn-seleccionar" class="btn-primary" onclick="seleccionarCarpeta()">
+          Seleccionar carpeta de inventario
+        </button>
+      </div>
+
+      <hr />
+
+      <div class="acciones">
+        <button class="btn-ghost" onclick="window.close()">Cerrar panel</button>
+        <button class="btn-danger-soft" onclick="confirmarReset()">Restablecer configuración</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const PUERTO = 7331;
+    const CARPETA_KEY = 'yagui_carpeta_inventario';
+
+    // ── Navegación entre estados ──────────────────────────────────────────────
+
+    function mostrar(id) {
+      ['estado-a', 'estado-b', 'estado-c'].forEach(s => {
+        document.getElementById(s).classList.toggle('activo', s === id);
+      });
+    }
+
+    // ── Formulario manual ─────────────────────────────────────────────────────
+
+    function mostrarFormManual() {
+      document.getElementById('a-instrucciones').style.display = 'none';
+      document.getElementById('a-form-manual').classList.add('visible');
+    }
+
+    function ocultarFormManual() {
+      document.getElementById('a-instrucciones').style.display = '';
+      document.getElementById('a-form-manual').classList.remove('visible');
+      document.getElementById('form-error').style.display = 'none';
+    }
+
+    function toggleToken() {
+      const inp = document.getElementById('f-tunnel-token');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+    }
+
+    async function enviarManual() {
+      const apiKey      = document.getElementById('f-apikey').value.trim();
+      const tunnelUrl   = document.getElementById('f-tunnel-url').value.trim();
+      const tunnelToken = document.getElementById('f-tunnel-token').value.trim();
+      const errEl       = document.getElementById('form-error');
+
+      if (!apiKey || !tunnelUrl || !tunnelToken) {
+        errEl.textContent = 'Todos los campos son obligatorios.';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      errEl.style.display = 'none';
+      mostrar('estado-b');
+
+      try {
+        const res = await fetch(`http://127.0.0.1:${PUERTO}/configurar-manual`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: apiKey, tunnel_url: tunnelUrl, tunnel_token: tunnelToken }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          ocultarFormManual();
+          setTimeout(poll, 2000);
+        } else {
+          mostrar('estado-a');
+          mostrarFormManual();
+          errEl.textContent = data.error ?? 'Error desconocido.';
+          errEl.style.display = 'block';
+        }
+      } catch (e) {
+        mostrar('estado-a');
+        mostrarFormManual();
+        errEl.textContent = `Error de conexión: ${e.message}`;
+        errEl.style.display = 'block';
+      }
+    }
+
+    // ── Reset ─────────────────────────────────────────────────────────────────
+
+    async function confirmarReset() {
+      const ok = confirm('¿Borrar la configuración y volver a empezar?\n\nSe detendrán el tunnel y el nodo-server.');
+      if (!ok) return;
+
+      mostrar('estado-b');
+      try {
+        await fetch(`http://127.0.0.1:${PUERTO}/configurar`, { method: 'DELETE' });
+      } catch {}
+      localStorage.removeItem(CARPETA_KEY);
+      setTimeout(poll, 1500);
+    }
+
+    // ── Carpeta de inventario ─────────────────────────────────────────────────
+
+    function actualizarUICarpeta(ruta) {
+      const info      = document.getElementById('carpeta-info');
+      const btnSel    = document.getElementById('btn-seleccionar');
+      const rutaTexto = document.getElementById('carpeta-ruta-texto');
+      if (ruta) {
+        rutaTexto.textContent = ruta;
+        info.classList.add('visible');
+        btnSel.style.display = 'none';
+      } else {
+        info.classList.remove('visible');
+        btnSel.style.display = '';
+      }
+    }
+
+    function cargarCarpeta(rutaServidor) {
+      // Prioridad: lo que devuelve /estado > localStorage
+      const ruta = rutaServidor ?? localStorage.getItem(CARPETA_KEY);
+      actualizarUICarpeta(ruta);
+    }
+
+    async function seleccionarCarpeta() {
+      try {
+        const { open } = window.__TAURI__.dialog;
+        const ruta = await open({ directory: true, multiple: false, title: 'Seleccionar carpeta de inventario' });
+        if (ruta) {
+          localStorage.setItem(CARPETA_KEY, ruta);
+          actualizarUICarpeta(ruta);
+          await fetch(`http://127.0.0.1:${PUERTO}/carpeta`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ carpeta: ruta }),
+          }).catch(() => {});
+        }
+      } catch (e) {
+        console.error('Error abriendo selector de carpeta:', e);
+      }
+    }
+
+    // ── Poll de estado ────────────────────────────────────────────────────────
+
+    async function fetchEstado() {
+      try {
+        const r = await fetch(`http://127.0.0.1:${PUERTO}/estado`);
+        if (!r.ok) return null;
+        return await r.json();
+      } catch { return null; }
+    }
+
+    function actualizar(data) {
+      if (!data) {
+        document.getElementById('a-error').style.display = 'none';
+        mostrar('estado-a');
+        return;
+      }
+
+      const { estado, tunnel_url, error, inventory_path } = data;
+      const apiKey = data.api_key;
+
+      if (estado === 'running') {
+        document.getElementById('val-tunnel').textContent = tunnel_url ?? '—';
+        document.getElementById('val-apikey').textContent = apiKey ? apiKey.slice(0, 16) + '…' : '—';
+        cargarCarpeta(inventory_path ?? null);
+        mostrar('estado-c');
+      } else if (estado === 'error') {
+        document.getElementById('a-error').textContent = error ?? 'Error desconocido';
+        document.getElementById('a-error').style.display = 'block';
+        mostrar('estado-a');
+      } else {
+        document.getElementById('a-error').style.display = 'none';
+        mostrar('estado-a');
+      }
+    }
+
+    async function poll() { actualizar(await fetchEstado()); }
+
+    poll();
+    setInterval(poll, 5000);
+  </script>
+</body>
+</html>

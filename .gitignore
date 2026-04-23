@@ -1,0 +1,12 @@
+node_modules/
+src-tauri/target/
+dist/
+dist-ssr/
+.env
+*.log
+npm-debug.log*
+gen/
+.DS_Store
+*.local
+.vscode/*
+!.vscode/extensions.json

@@ -1,0 +1,138 @@
+mod config;
+mod installer;
+mod nodo;
+mod server;
+mod tray;
+
+use std::sync::{Arc, Mutex};
+use tauri::RunEvent;
+use tauri_plugin_autostart::MacosLauncher;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let nodo_handle     = nodo::new_handle();
+    let tunnel_pid      = Arc::new(Mutex::new(None::<u32>));
+    let error_msg       = Arc::new(Mutex::new(None::<String>));
+    let inventory_path  = Arc::new(Mutex::new(None::<String>));
+
+    let app_state = server::AppState {
+        nodo_handle:    nodo_handle.clone(),
+        tunnel_pid:     tunnel_pid.clone(),
+        error_msg:      error_msg.clone(),
+        inventory_path: inventory_path.clone(),
+    };
+
+    // Clonar para mover al hilo del servidor HTTP
+    let server_state = app_state.clone();
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
+        .plugin(tauri_plugin_opener::init())
+        .setup(move |app| {
+            // ── Ocultar de la barra de dock/taskbar ──────────────────────
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
+            // ── Crear icono de bandeja ────────────────────────────────────
+            let tray = tray::crear_tray(app.handle())?;
+            let tray_handle = tray.clone();
+
+            // ── Arrancar servidor HTTP en background ──────────────────────
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("tokio runtime");
+
+            let router = server::build_router(server_state.clone());
+
+            std::thread::spawn(move || {
+                rt.block_on(async move {
+                    match tokio::net::TcpListener::bind("0.0.0.0:7331").await {
+                        Ok(listener) => {
+                            log::info!("[server] escuchando en 0.0.0.0:7331");
+                            if let Err(e) = axum::serve(listener, router).await {
+                                log::error!("[server] error: {}", e);
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("[server] no se pudo bind :7331 — {}", e);
+                        }
+                    }
+                });
+            });
+
+            // ── Cargar config y arrancar servicios si está configurado ────
+            let cfg = config::load();
+            if cfg.is_complete() {
+                tray::actualizar_tray(&tray_handle, tray::EstadoTray::Iniciando);
+
+                let nh   = server_state.nodo_handle.clone();
+                let tray2 = tray_handle.clone();
+                let err2  = server_state.error_msg.clone();
+                let tpid  = server_state.tunnel_pid.clone();
+                let cfg2  = cfg.clone();
+
+                std::thread::spawn(move || {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .expect("tokio rt setup");
+
+                    // Arrancar tunnel (instala cloudflared si falta)
+                    match rt.block_on(installer::arrancar_tunnel_directo(&cfg2.tunnel_token)) {
+                        Ok(child) => {
+                            *tpid.lock().unwrap() = Some(child.id());
+                            std::mem::forget(child);
+                        }
+                        Err(e) => {
+                            log::error!("[setup] tunnel: {}", e);
+                            *err2.lock().unwrap() = Some(e.to_string());
+                            tray::actualizar_tray(&tray2, tray::EstadoTray::Error);
+                            return;
+                        }
+                    }
+
+                    // Dar tiempo al tunnel para establecerse
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+
+                    // Arrancar nodo-server
+                    match nodo::arrancar(&nh, &cfg2.api_key, &cfg2.tunnel_url) {
+                        Ok(()) => {
+                            tray::actualizar_tray(&tray2, tray::EstadoTray::Corriendo);
+                        }
+                        Err(e) => {
+                            log::error!("[setup] nodo: {}", e);
+                            *err2.lock().unwrap() = Some(e.to_string());
+                            tray::actualizar_tray(&tray2, tray::EstadoTray::Error);
+                        }
+                    }
+                });
+            } else {
+                // No configurado → abrir ventana de setup
+                tray::actualizar_tray(&tray_handle, tray::EstadoTray::Detenido);
+                tray::abrir_ventana_setup(app.handle());
+            }
+
+            Ok(())
+        })
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "abrir" => tray::abrir_ventana_setup(app),
+            "salir" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .build(tauri::generate_context!())
+        .expect("error construyendo la app")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { api, .. } = event {
+                // Evitar que la app salga al cerrar la última ventana
+                api.prevent_exit();
+            }
+            let _ = app; // evitar warning unused
+        });
+}
