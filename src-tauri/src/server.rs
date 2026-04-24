@@ -9,13 +9,13 @@
 
 use axum::{
     extract::State,
-    http::StatusCode,
     response::Json,
-    routing::{delete, get, post},
+    routing::{get, post},
     Router,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 
@@ -28,6 +28,7 @@ pub struct AppState {
     pub tunnel_pid:     Arc<Mutex<Option<u32>>>,
     pub error_msg:      Arc<Mutex<Option<String>>>,
     pub inventory_path: Arc<Mutex<Option<String>>>,
+    pub nodo_dir:       PathBuf,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -60,17 +61,21 @@ async fn estado(State(state): State<AppState>) -> Json<Value> {
     let tunnel_pid     = *state.tunnel_pid.lock().unwrap();
     let error_msg      = state.error_msg.lock().unwrap().clone();
     let inventory_path = state.inventory_path.lock().unwrap().clone();
+    let configured     = cfg.is_complete();
 
     let estado_str = if let Some(ref msg) = error_msg {
         if msg.is_empty() { "stopped" } else { "error" }
     } else if nodo_activo {
         "running"
+    } else if configured {
+        "starting"
     } else {
         "stopped"
     };
 
     Json(json!({
         "estado":          estado_str,
+        "configured":      configured,
         "nodo_activo":     nodo_activo,
         "tunnel_pid":      tunnel_pid,
         "tunnel_url":      cfg.tunnel_url,
@@ -135,8 +140,17 @@ async fn aplicar_config(
 
     *state.tunnel_pid.lock().unwrap() = Some(tunnel_pid);
 
+    // Instalar nodo-server si no existe
+    nodo::instalar_si_falta(&state.nodo_dir)
+        .await
+        .map_err(|e| {
+            let msg = format!("nodo install error: {}", e);
+            println!("[configurar] ERROR nodo install: {}", msg);
+            msg
+        })?;
+
     // Arrancar nodo-server
-    nodo::arrancar(&state.nodo_handle, &body.api_key, &body.tunnel_url)
+    nodo::arrancar(&state.nodo_handle, &state.nodo_dir, &body.api_key, &body.tunnel_url)
         .map_err(|e| {
             let msg = format!("nodo error: {}", e);
             println!("[configurar] ERROR nodo: {}", msg);

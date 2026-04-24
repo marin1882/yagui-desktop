@@ -15,15 +15,29 @@ pub fn run() {
     let error_msg       = Arc::new(Mutex::new(None::<String>));
     let inventory_path  = Arc::new(Mutex::new(None::<String>));
 
+    // Directorio donde se instala el nodo-server:
+    //   Linux:   ~/.local/share/yagui/nodo-server
+    //   macOS:   ~/Library/Application Support/yagui/nodo-server
+    //   Windows: %LOCALAPPDATA%\yagui\nodo-server
+    let nodo_dir = dirs::data_local_dir()
+        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".local").join("share"))
+        .join("yagui")
+        .join("nodo-server");
+
     let app_state = server::AppState {
         nodo_handle:    nodo_handle.clone(),
         tunnel_pid:     tunnel_pid.clone(),
         error_msg:      error_msg.clone(),
         inventory_path: inventory_path.clone(),
+        nodo_dir:       nodo_dir.clone(),
     };
 
     // Clonar para mover al hilo del servidor HTTP
     let server_state = app_state.clone();
+
+    // Clonar para el handler de "Salir" (necesita matar procesos antes de exit)
+    let exit_tunnel_pid    = tunnel_pid.clone();
+    let exit_nodo_handle   = nodo_handle.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -70,11 +84,12 @@ pub fn run() {
             if cfg.is_complete() {
                 tray::actualizar_tray(&tray_handle, tray::EstadoTray::Iniciando);
 
-                let nh   = server_state.nodo_handle.clone();
+                let nh    = server_state.nodo_handle.clone();
                 let tray2 = tray_handle.clone();
                 let err2  = server_state.error_msg.clone();
                 let tpid  = server_state.tunnel_pid.clone();
                 let cfg2  = cfg.clone();
+                let ndir  = server_state.nodo_dir.clone();
 
                 std::thread::spawn(move || {
                     let rt = tokio::runtime::Builder::new_current_thread()
@@ -99,8 +114,16 @@ pub fn run() {
                     // Dar tiempo al tunnel para establecerse
                     std::thread::sleep(std::time::Duration::from_secs(2));
 
+                    // Instalar nodo-server si falta
+                    if let Err(e) = rt.block_on(nodo::instalar_si_falta(&ndir)) {
+                        log::error!("[setup] nodo install: {}", e);
+                        *err2.lock().unwrap() = Some(e.to_string());
+                        tray::actualizar_tray(&tray2, tray::EstadoTray::Error);
+                        return;
+                    }
+
                     // Arrancar nodo-server
-                    match nodo::arrancar(&nh, &cfg2.api_key, &cfg2.tunnel_url) {
+                    match nodo::arrancar(&nh, &ndir, &cfg2.api_key, &cfg2.tunnel_url) {
                         Ok(()) => {
                             tray::actualizar_tray(&tray2, tray::EstadoTray::Corriendo);
                         }
@@ -119,10 +142,21 @@ pub fn run() {
 
             Ok(())
         })
-        .on_menu_event(|app, event| match event.id.as_ref() {
+        .on_menu_event(move |app, event| match event.id.as_ref() {
             "abrir" => tray::abrir_ventana_setup(app),
             "salir" => {
-                app.exit(0);
+                // Matar nodo-server
+                nodo::detener(&exit_nodo_handle);
+
+                // Matar cloudflared por PID
+                if let Some(pid) = exit_tunnel_pid.lock().unwrap().take() {
+                    let _ = std::process::Command::new("kill")
+                        .args(["-TERM", &pid.to_string()])
+                        .status();
+                }
+
+                // Salir directamente — app.exit(0) queda bloqueado por prevent_exit()
+                std::process::exit(0);
             }
             _ => {}
         })

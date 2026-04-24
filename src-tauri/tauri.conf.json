@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Yagüi Desktop",
+  "productName": "Yagui Desktop",
   "version": "0.1.0",
   "identifier": "com.yagui.desktop",
   "build": {
@@ -30,11 +30,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "linux": {
-      "deb": {
-        "depends": ["cloudflared"]
-      }
-    }
+    "linux": {}
+
   },
   "plugins": {}
 }

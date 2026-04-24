@@ -74,8 +74,8 @@
       background: #14532d; color: #86efac;
       padding: 0.5rem 1.25rem; border-radius: 999px;
       font-weight: 600; font-size: 1rem;
+      transition: background 0.3s, color 0.3s;
     }
-    .badge::before { content: "●"; color: #22c55e; }
 
     .dato {
       background: #1e293b; border-radius: 8px; padding: 0.75rem 1rem;
@@ -114,6 +114,12 @@
     .btn-danger-soft { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; font-size: 0.82rem; padding: 0.5rem 1.25rem; }
     .btn-ghost     { background: transparent; color: #64748b; text-decoration: underline; font-weight: 400; }
     .btn-cancel    { background: transparent; color: #475569; font-size: 0.85rem; font-weight: 400; }
+    .btn-carpeta-grande {
+      background: #166534; color: #86efac; border: 2px dashed #22c55e;
+      width: 100%; padding: 1rem; font-size: 1rem; font-weight: 700;
+      border-radius: 10px; text-align: center; letter-spacing: 0.01em;
+    }
+    .btn-carpeta-grande:hover { background: #14532d; opacity: 1; border-color: #4ade80; }
 
     .acciones { display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: center; }
 
@@ -210,15 +216,33 @@
           Si un producto no está aquí, el nodo no aparecerá cuando lo busquen.
         </p>
 
+        <!-- Sin carpeta seleccionada -->
+        <button id="btn-seleccionar" class="btn-carpeta-grande" onclick="seleccionarCarpeta()">
+          📁 Seleccionar carpeta de inventario
+        </button>
+
+        <!-- Con carpeta seleccionada -->
         <div id="carpeta-info" class="carpeta-sel">
           <p class="carpeta-ruta" id="carpeta-ruta-texto"></p>
-          <p class="carpeta-nota">Solo los productos de esta carpeta son visibles para las IAs</p>
+          <p class="carpeta-nota">✓ Solo los productos de esta carpeta son visibles para las IAs</p>
           <button class="btn-secondary" onclick="seleccionarCarpeta()">Cambiar carpeta</button>
         </div>
+      </div>
 
-        <button id="btn-seleccionar" class="btn-primary" onclick="seleccionarCarpeta()">
-          Seleccionar carpeta de inventario
-        </button>
+      <!-- Stats de inventario -->
+      <div class="inventario-section">
+        <p class="inventario-titulo">Inventario</p>
+        <div id="inv-cargando" style="color:#64748b;font-size:0.82rem">Cargando stats...</div>
+        <div id="inv-datos" style="display:none">
+          <p style="font-size:1.5rem;font-weight:700;color:#f1f5f9;margin:0.25rem 0">
+            📦 <span id="inv-total">—</span> productos
+          </p>
+          <p id="inv-ultima" style="font-size:0.78rem;color:#64748b;margin-bottom:0.75rem"></p>
+          <button class="btn-secondary" onclick="abrirInventarioJson()">Abrir inventario.json</button>
+        </div>
+        <div id="inv-error" style="display:none;color:#64748b;font-size:0.78rem">
+          Nodo no disponible (puerto 3000)
+        </div>
       </div>
 
       <hr />
@@ -330,6 +354,14 @@
       }
     }
 
+    function mostrarCarpetaConfirmada(ruta) {
+      // Feedback visual inmediato tras seleccionar
+      actualizarUICarpeta(ruta);
+      const rutaTexto = document.getElementById('carpeta-ruta-texto');
+      rutaTexto.style.color = '#4ade80';
+      setTimeout(() => { rutaTexto.style.color = ''; }, 2000);
+    }
+
     function cargarCarpeta(rutaServidor) {
       // Prioridad: lo que devuelve /estado > localStorage
       const ruta = rutaServidor ?? localStorage.getItem(CARPETA_KEY);
@@ -342,7 +374,7 @@
         const ruta = await open({ directory: true, multiple: false, title: 'Seleccionar carpeta de inventario' });
         if (ruta) {
           localStorage.setItem(CARPETA_KEY, ruta);
-          actualizarUICarpeta(ruta);
+          mostrarCarpetaConfirmada(ruta);
           await fetch(`http://127.0.0.1:${PUERTO}/carpeta`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -371,18 +403,32 @@
         return;
       }
 
-      const { estado, tunnel_url, error, inventory_path } = data;
+      const { estado, configured, tunnel_url, error, inventory_path } = data;
       const apiKey = data.api_key;
 
-      if (estado === 'running') {
+      // Mostrar Estado C siempre que haya configuración guardada
+      if (configured) {
         document.getElementById('val-tunnel').textContent = tunnel_url ?? '—';
         document.getElementById('val-apikey').textContent = apiKey ? apiKey.slice(0, 16) + '…' : '—';
         cargarCarpeta(inventory_path ?? null);
+
+        // Actualizar badge según estado real del nodo
+        const badge = document.querySelector('#estado-c .badge');
+        if (estado === 'running') {
+          badge.textContent = 'Nodo activo';
+          badge.style.background = '#14532d';
+          badge.style.color = '#86efac';
+        } else if (estado === 'error') {
+          badge.textContent = '⚠ Error — ' + (error ?? 'ver logs');
+          badge.style.background = '#450a0a';
+          badge.style.color = '#fca5a5';
+        } else {
+          badge.textContent = '⏳ Iniciando...';
+          badge.style.background = '#422006';
+          badge.style.color = '#fde68a';
+        }
+
         mostrar('estado-c');
-      } else if (estado === 'error') {
-        document.getElementById('a-error').textContent = error ?? 'Error desconocido';
-        document.getElementById('a-error').style.display = 'block';
-        mostrar('estado-a');
       } else {
         document.getElementById('a-error').style.display = 'none';
         mostrar('estado-a');
@@ -393,6 +439,62 @@
 
     poll();
     setInterval(poll, 5000);
+
+    // ── Stats de inventario (nodo en :3000) ───────────────────────────────────
+
+    let invArchivoPath = null;
+
+    async function fetchInvStats() {
+      try {
+        const r = await fetch('http://127.0.0.1:3000/inventario/stats');
+        if (!r.ok) throw new Error();
+        return await r.json();
+      } catch { return null; }
+    }
+
+    function tiempoRelativo(isoStr) {
+      if (!isoStr) return "";
+      const diff = (Date.now() - new Date(isoStr).getTime()) / 1000;
+      if (diff < 60)   return "hace menos de 1 minuto";
+      if (diff < 3600) return `hace ${Math.floor(diff / 60)} minutos`;
+      if (diff < 86400)return `hace ${Math.floor(diff / 3600)} horas`;
+      return `hace ${Math.floor(diff / 86400)} días`;
+    }
+
+    async function actualizarInvStats() {
+      const data = await fetchInvStats();
+      const elCargando = document.getElementById('inv-cargando');
+      const elDatos    = document.getElementById('inv-datos');
+      const elError    = document.getElementById('inv-error');
+      if (!data) {
+        elCargando.style.display = 'none';
+        elDatos.style.display    = 'none';
+        elError.style.display    = '';
+        return;
+      }
+      invArchivoPath = data.archivo ?? null;
+      document.getElementById('inv-total').textContent  = data.total ?? '0';
+      document.getElementById('inv-ultima').textContent =
+        data.ultima_actualizacion
+          ? 'Última actualización: ' + tiempoRelativo(data.ultima_actualizacion)
+          : 'Sin productos todavía';
+      elCargando.style.display = 'none';
+      elError.style.display    = 'none';
+      elDatos.style.display    = '';
+    }
+
+    async function abrirInventarioJson() {
+      if (!invArchivoPath) return;
+      try {
+        await window.__TAURI__.opener.openPath(invArchivoPath);
+      } catch (e) {
+        console.error('Error abriendo inventario.json:', e);
+      }
+    }
+
+    // Cargar stats al arrancar y cada 30 s
+    actualizarInvStats();
+    setInterval(actualizarInvStats, 30_000);
   </script>
 </body>
 </html>

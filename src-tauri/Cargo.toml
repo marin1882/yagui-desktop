@@ -25,4 +25,5 @@ reqwest           = { version = "0.12", features = ["stream", "rustls-tls"], def
 dirs              = "5"
 log               = "0.4"
 anyhow            = "1"
+zip               = { version = "2", default-features = false, features = ["deflate"] }
 tauri-plugin-dialog = "2"
