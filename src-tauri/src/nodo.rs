@@ -154,8 +154,10 @@ pub fn arrancar(
 
     let child = Command::new(&node_bin)
         .arg(&main_js)
-        .env("API_KEY", api_key)
-        .env("TUNNEL_URL", tunnel_url)
+        .env("API_KEY",           api_key)
+        .env("TUNNEL_URL",        tunnel_url)
+        .env("SUPABASE_URL",      "https://lbozfbvenchyafyihyso.supabase.co")
+        .env("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxib3pmYnZlbmNoeWFmeWloeXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM3MDgwNjksImV4cCI6MjA1OTI4NDA2OX0.2hSK4EUdmGwUpqH0dGFzD3LN78H3MqJyImHTWHJinE0")
         .current_dir(nodo_dir)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
