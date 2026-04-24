@@ -131,8 +131,32 @@ pub fn run() {
                             log::error!("[setup] nodo: {}", e);
                             *err2.lock().unwrap() = Some(e.to_string());
                             tray::actualizar_tray(&tray2, tray::EstadoTray::Error);
+                            return;
                         }
                     }
+
+                    // ── Watcher: relanza el nodo si muere (p.ej. tras auto-update) ──
+                    let watch_nh   = nh.clone();
+                    let watch_ndir = ndir.clone();
+                    let watch_cfg  = cfg2.clone();
+                    std::thread::spawn(move || {
+                        loop {
+                            std::thread::sleep(std::time::Duration::from_secs(10));
+                            if !nodo::esta_corriendo(&watch_nh) {
+                                log::info!("[nodo] proceso terminado, relanzando en 3 s...");
+                                std::thread::sleep(std::time::Duration::from_secs(3));
+                                match nodo::arrancar(
+                                    &watch_nh,
+                                    &watch_ndir,
+                                    &watch_cfg.api_key,
+                                    &watch_cfg.tunnel_url,
+                                ) {
+                                    Ok(())  => log::info!("[nodo] relanzado OK"),
+                                    Err(e)  => log::error!("[nodo] error al relanzar: {}", e),
+                                }
+                            }
+                        }
+                    });
                 });
             } else {
                 // No configurado → abrir ventana de setup

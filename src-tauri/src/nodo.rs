@@ -86,6 +86,38 @@ pub async fn instalar_si_falta(nodo_dir: &Path) -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("npm install falló con código {:?}", status.code()));
     }
 
+    // Inicializar repo git para que index.js pueda hacer auto-update en el futuro
+    log::info!("[nodo] inicializando repo git para auto-actualizaciones...");
+    let git_init_ok = Command::new("git")
+        .args(["init"])
+        .current_dir(nodo_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    if git_init_ok {
+        let _ = Command::new("git")
+            .args(["remote", "add", "origin", "https://github.com/marin1882/yagui-nodo.git"])
+            .current_dir(nodo_dir)
+            .stdout(Stdio::null()).stderr(Stdio::null())
+            .status();
+        let _ = Command::new("git")
+            .args(["fetch", "origin", "master", "--depth=1"])
+            .current_dir(nodo_dir)
+            .stdout(Stdio::null()).stderr(Stdio::null())
+            .status();
+        let _ = Command::new("git")
+            .args(["reset", "--hard", "origin/master"])
+            .current_dir(nodo_dir)
+            .stdout(Stdio::null()).stderr(Stdio::null())
+            .status();
+        log::info!("[nodo] repo git listo");
+    } else {
+        log::warn!("[nodo] git no disponible — auto-update desactivado hasta próxima instalación");
+    }
+
     log::info!("[nodo] instalación completada en {:?}", nodo_dir);
     Ok(())
 }
