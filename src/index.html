@@ -403,7 +403,7 @@
         return;
       }
 
-      const { estado, configured, tunnel_url, error, inventory_path } = data;
+      const { estado, corriendo, configured, tunnel_url, error, inventory_path } = data;
       const apiKey = data.api_key;
 
       // Mostrar Estado C siempre que haya configuración guardada
@@ -412,9 +412,9 @@
         document.getElementById('val-apikey').textContent = apiKey ? apiKey.slice(0, 16) + '…' : '—';
         cargarCarpeta(inventory_path ?? null);
 
-        // Actualizar badge según estado real del nodo
+        // Actualizar badge — acepta "corriendo:true" (nuevo) o "estado:'running'" (legacy)
         const badge = document.querySelector('#estado-c .badge');
-        if (estado === 'running') {
+        if (corriendo === true || estado === 'running') {
           badge.textContent = 'Nodo activo';
           badge.style.background = '#14532d';
           badge.style.color = '#86efac';
@@ -435,7 +435,23 @@
       }
     }
 
-    async function poll() { actualizar(await fetchEstado()); }
+    async function poll() {
+      const data = await fetchEstado();
+      actualizar(data);
+
+      // Re-sincronizar carpeta guardada en localStorage si el servidor no la tiene
+      // (ocurre en cada reinicio de la app)
+      if (data && data.configured && !data.inventory_path) {
+        const local = localStorage.getItem(CARPETA_KEY);
+        if (local) {
+          fetch(`http://127.0.0.1:${PUERTO}/carpeta`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ carpeta: local }),
+          }).catch(() => {});
+        }
+      }
+    }
 
     poll();
     setInterval(poll, 5000);

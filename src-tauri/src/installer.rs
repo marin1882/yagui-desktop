@@ -136,6 +136,12 @@ pub fn instalar_servicio_tunnel(token: &str) -> std::io::Result<std::process::Ex
 /// Arranca el tunnel directamente como proceso hijo (sin privilegios de admin).
 /// Llama a `instalar_si_falta()` internamente para garantizar que el binario existe.
 pub async fn arrancar_tunnel_directo(token: &str) -> anyhow::Result<std::process::Child> {
+    // Matar procesos cloudflared anteriores para evitar acumulación
+    let _ = std::process::Command::new("pkill")
+        .args(["-f", "cloudflared"])
+        .status();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
     // a) Garantizar que cloudflared existe ANTES de intentar ejecutarlo
     let bin = instalar_si_falta().await?;
 

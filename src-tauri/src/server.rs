@@ -75,6 +75,7 @@ async fn estado(State(state): State<AppState>) -> Json<Value> {
 
     Json(json!({
         "estado":          estado_str,
+        "corriendo":       nodo_activo,    // alias directo para el frontend
         "configured":      configured,
         "nodo_activo":     nodo_activo,
         "tunnel_pid":      tunnel_pid,
@@ -150,12 +151,18 @@ async fn aplicar_config(
         })?;
 
     // Arrancar nodo-server
-    nodo::arrancar(&state.nodo_handle, &state.nodo_dir, &body.api_key, &body.tunnel_url)
-        .map_err(|e| {
-            let msg = format!("nodo error: {}", e);
-            println!("[configurar] ERROR nodo: {}", msg);
-            msg
-        })?;
+    nodo::arrancar(
+        &state.nodo_handle,
+        &state.nodo_dir,
+        &body.api_key,
+        &body.tunnel_url,
+        body.inventory_path.as_deref(),
+    )
+    .map_err(|e| {
+        let msg = format!("nodo error: {}", e);
+        println!("[configurar] ERROR nodo: {}", msg);
+        msg
+    })?;
 
     *state.error_msg.lock().unwrap() = None;
     println!("[configurar] completado OK");
@@ -244,7 +251,24 @@ async fn set_carpeta(
     State(state): State<AppState>,
     Json(body): Json<CarpetaBody>,
 ) -> Json<OkResp> {
-    println!("[carpeta] nueva ruta: {:?}", body.carpeta);
-    *state.inventory_path.lock().unwrap() = Some(body.carpeta);
+    let carpeta = body.carpeta.clone();
+    println!("[carpeta] nueva ruta: {:?}", carpeta);
+    *state.inventory_path.lock().unwrap() = Some(carpeta.clone());
+
+    // Relanzar nodo con el nuevo INVENTORY_PATH para que lo use de inmediato
+    let cfg = config::load();
+    if cfg.is_complete() {
+        match nodo::arrancar(
+            &state.nodo_handle,
+            &state.nodo_dir,
+            &cfg.api_key,
+            &cfg.tunnel_url,
+            Some(carpeta.as_str()),
+        ) {
+            Ok(())  => println!("[carpeta] nodo relanzado con INVENTORY_PATH={}", carpeta),
+            Err(e)  => println!("[carpeta] error relanzando nodo: {}", e),
+        }
+    }
+
     Json(OkResp { ok: true, error: None })
 }

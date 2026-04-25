@@ -90,6 +90,7 @@ pub fn run() {
                 let tpid  = server_state.tunnel_pid.clone();
                 let cfg2  = cfg.clone();
                 let ndir  = server_state.nodo_dir.clone();
+                let inv   = server_state.inventory_path.clone();
 
                 std::thread::spawn(move || {
                     let rt = tokio::runtime::Builder::new_current_thread()
@@ -123,7 +124,8 @@ pub fn run() {
                     }
 
                     // Arrancar nodo-server
-                    match nodo::arrancar(&nh, &ndir, &cfg2.api_key, &cfg2.tunnel_url) {
+                    let inv_inicial = inv.lock().unwrap().clone();
+                    match nodo::arrancar(&nh, &ndir, &cfg2.api_key, &cfg2.tunnel_url, inv_inicial.as_deref()) {
                         Ok(()) => {
                             tray::actualizar_tray(&tray2, tray::EstadoTray::Corriendo);
                         }
@@ -139,17 +141,20 @@ pub fn run() {
                     let watch_nh   = nh.clone();
                     let watch_ndir = ndir.clone();
                     let watch_cfg  = cfg2.clone();
+                    let watch_inv  = inv.clone();
                     std::thread::spawn(move || {
                         loop {
                             std::thread::sleep(std::time::Duration::from_secs(10));
                             if !nodo::esta_corriendo(&watch_nh) {
                                 log::info!("[nodo] proceso terminado, relanzando en 3 s...");
                                 std::thread::sleep(std::time::Duration::from_secs(3));
+                                let inv_path = watch_inv.lock().unwrap().clone();
                                 match nodo::arrancar(
                                     &watch_nh,
                                     &watch_ndir,
                                     &watch_cfg.api_key,
                                     &watch_cfg.tunnel_url,
+                                    inv_path.as_deref(),
                                 ) {
                                     Ok(())  => log::info!("[nodo] relanzado OK"),
                                     Err(e)  => log::error!("[nodo] error al relanzar: {}", e),

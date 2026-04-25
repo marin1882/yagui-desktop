@@ -130,6 +130,7 @@ pub fn arrancar(
     nodo_dir: &Path,
     api_key: &str,
     tunnel_url: &str,
+    inventory_path: Option<&str>,
 ) -> anyhow::Result<()> {
     let mut guard = handle.lock().unwrap();
 
@@ -152,13 +153,19 @@ pub fn arrancar(
 
     let node_bin = which_node()?;
 
-    let child = Command::new(&node_bin)
-        .arg(&main_js)
+    let mut cmd = Command::new(&node_bin);
+    cmd.arg(&main_js)
         .env("API_KEY",           api_key)
         .env("TUNNEL_URL",        tunnel_url)
         .env("SUPABASE_URL",      "https://lbozfbvenchyafyihyso.supabase.co")
-        .env("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxib3pmYnZlbmNoeWFmeWloeXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM3MDgwNjksImV4cCI6MjA1OTI4NDA2OX0.2hSK4EUdmGwUpqH0dGFzD3LN78H3MqJyImHTWHJinE0")
-        .current_dir(nodo_dir)
+        .env("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxib3pmYnZlbmNoeWFmeWloeXNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzM5NTEsImV4cCI6MjA5MTc0OTk1MX0.4RwMzeCPHKHX6B4WGH8S3yQHXFwmqKzCo6u8sL37ddQ")
+        .current_dir(nodo_dir);
+
+    if let Some(path) = inventory_path {
+        cmd.env("INVENTORY_PATH", path);
+    }
+
+    let child = cmd
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()?;
