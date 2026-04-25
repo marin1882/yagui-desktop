@@ -162,7 +162,10 @@ pub fn arrancar(
         .current_dir(nodo_dir);
 
     if let Some(path) = inventory_path {
+        log::info!("[nodo] INVENTORY_PATH={}", path);
         cmd.env("INVENTORY_PATH", path);
+    } else {
+        log::info!("[nodo] INVENTORY_PATH no establecido (carpeta no seleccionada)");
     }
 
     let child = cmd
