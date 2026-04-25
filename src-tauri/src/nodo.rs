@@ -186,18 +186,40 @@ pub fn detener(handle: &NodoHandle) {
 }
 
 /// Comprueba si el proceso sigue vivo.
+/// Si el handle interno no lo detecta, hace una comprobación TCP al puerto 3000
+/// como fallback — cubre el caso de procesos arrancados fuera del handle.
 pub fn esta_corriendo(handle: &NodoHandle) -> bool {
-    let mut guard = handle.lock().unwrap();
-    match *guard {
-        None => false,
-        Some(ref mut child) => match child.try_wait() {
-            Ok(None) => true,
-            Ok(Some(_)) | Err(_) => {
-                *guard = None;
-                false
-            }
-        },
+    let proceso_en_handle = {
+        let mut guard = handle.lock().unwrap();
+        match *guard {
+            None => false,
+            Some(ref mut child) => match child.try_wait() {
+                Ok(None) => true,
+                Ok(Some(_)) | Err(_) => {
+                    *guard = None;
+                    false
+                }
+            },
+        }
+    };
+
+    if proceso_en_handle {
+        return true;
     }
+
+    // Fallback: aunque el handle no lo sepa, comprobar si el puerto 3000 acepta conexiones
+    puerto_3000_activo()
+}
+
+/// Intenta abrir una conexión TCP al puerto 3000 con timeout de 1 s.
+fn puerto_3000_activo() -> bool {
+    use std::net::TcpStream;
+    use std::time::Duration;
+    TcpStream::connect_timeout(
+        &"127.0.0.1:3000".parse().unwrap(),
+        Duration::from_secs(1),
+    )
+    .is_ok()
 }
 
 // ── Búsqueda de binarios ──────────────────────────────────────────────────────
